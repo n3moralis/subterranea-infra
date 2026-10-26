@@ -1,0 +1,12 @@
+---
+galaxy_info:
+  role_name: cis
+  author: subterranea
+  description: CIS Level 1 remediation (wraps ansible-lockdown RHEL9-CIS) with first-run reboot
+  license: MIT
+  min_ansible_version: "2.16"
+  platforms:
+    - name: EL
+      versions: ["9"]
+# RHEL9-CIS comes from requirements.yml (ansible-galaxy role install -p roles).
+dependencies: []

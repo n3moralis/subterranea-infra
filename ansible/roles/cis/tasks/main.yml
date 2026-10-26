@@ -1,0 +1,46 @@
+---
+# Building block: CIS Level 1, applied automatically. Blocks are rebuildable
+# (Terraform + Ansible), so remediation runs without manual confirmation.
+# Vault nodes are excluded: they use 01-cis-hardening.yml with its own guards.
+- name: CIS Level 1 on Rocky/RHEL 9
+  when:
+    - cis_enabled | bool
+    - ansible_facts['os_family'] == 'RedHat'
+    - ansible_facts['distribution_major_version'] == '9'
+  block:
+    - name: Never on Vault nodes
+      ansible.builtin.assert:
+        that: "'vault_cluster' not in group_names"
+        fail_msg: "{{ inventory_hostname }} is a Vault node — use 01-cis-hardening.yml."
+        quiet: true
+
+    - name: First CIS run on this host?
+      ansible.builtin.stat:
+        path: "{{ cis_marker }}"
+      register: cis_marker_stat
+
+    - name: CIS Level 1 remediation (ansible-lockdown RHEL9-CIS)
+      ansible.builtin.include_role:
+        name: RHEL9-CIS
+
+    - name: Reboot after the first remediation
+      ansible.builtin.reboot:
+        reboot_timeout: 600
+        msg: "Reboot after first CIS Level 1 remediation (Ansible)"
+      when:
+        - not cis_marker_stat.stat.exists
+        - cis_reboot_on_first_run | bool
+
+    - name: Remember that CIS was applied
+      ansible.builtin.copy:
+        dest: "{{ cis_marker }}"
+        content: "CIS Level 1 first applied by Ansible on {{ ansible_facts['date_time']['iso8601'] }}\n"
+        owner: root
+        group: root
+        mode: "0644"
+      when: not cis_marker_stat.stat.exists
+
+- name: No CIS role for this OS
+  ansible.builtin.debug:
+    msg: "{{ inventory_hostname }}: {{ ansible_facts['distribution'] }} has no CIS role here — role hardening covers it."
+  when: ansible_facts['os_family'] != 'RedHat'

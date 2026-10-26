@@ -1,0 +1,35 @@
+---
+- name: Baseline packages
+  ansible.builtin.package:
+    name: "{{ base_os_packages + base_extra_packages }}"
+    state: present
+
+- name: Time sync running
+  ansible.builtin.systemd_service:
+    name: "{{ base_chrony_service }}"
+    enabled: true
+    state: started
+
+# qemu-guest-agent needs the virtio-serial port that Proxmox only adds when
+# "QEMU Guest Agent" is enabled for the VM (Terraform: qemu_agent = true).
+# Without the port the unit cannot start, so: always enable, start only when
+# the device exists. Order: role installs the package -> set qemu_agent = true
+# in vms.tf -> apply (VM restarts) -> agent starts on boot.
+- name: Guest agent device present?
+  ansible.builtin.stat:
+    path: /dev/virtio-ports/org.qemu.guest_agent.0
+  register: base_qga_dev
+
+- name: Guest agent enabled (started only if Proxmox provides the device)
+  ansible.builtin.systemd_service:
+    name: qemu-guest-agent
+    enabled: true
+    state: "{{ 'started' if base_qga_dev.stat.exists else omit }}"
+
+- name: Guest agent device missing
+  ansible.builtin.debug:
+    msg: >-
+      qemu-guest-agent installed and enabled, but Proxmox does not expose the
+      agent device yet. Set qemu_agent = true in terraform/proxmox/vms.tf and
+      apply; the agent starts after the VM restart.
+  when: not base_qga_dev.stat.exists

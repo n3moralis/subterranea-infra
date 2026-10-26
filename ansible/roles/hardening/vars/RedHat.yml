@@ -1,0 +1,4 @@
+---
+hardening_packages: [firewalld, audit, policycoreutils-python-utils]
+hardening_sudo_group: wheel
+hardening_sshd_service: sshd

@@ -1,0 +1,31 @@
+---
+- name: Keyring directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+
+- name: GitLab Runner signing key
+  ansible.builtin.get_url:
+    url: "{{ gitlab_runner_repo_base }}/gpgkey"
+    dest: /etc/apt/keyrings/gitlab-runner.asc
+    mode: "0644"
+
+- name: GitLab Runner repository (key-pinned)
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [signed-by=/etc/apt/keyrings/gitlab-runner.asc]
+      {{ gitlab_runner_repo_base }}/debian/ {{ ansible_facts['distribution_release'] }} main
+    filename: gitlab-runner
+    state: present
+
+- name: GitLab Runner (pinned)
+  ansible.builtin.apt:
+    name: "gitlab-runner={{ gitlab_runner_version }}-1"
+    state: present
+    update_cache: true
+
+- name: Hold the version (upgrades only together with GitLab)
+  ansible.builtin.dpkg_selections:
+    name: gitlab-runner
+    selection: hold

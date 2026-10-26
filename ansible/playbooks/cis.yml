@@ -1,0 +1,13 @@
+---
+# Building block: CIS Level 1 alone (role cis -> ansible-lockdown RHEL9-CIS).
+# Applies changes automatically; first run reboots once.
+#   ansible-playbook playbooks/cis.yml -e target=<group-or-host> -K
+#   Audit only (report, no changes): add --check
+# Block playbooks (block-base.yml, ci-runner.yml) already include it.
+# Vault nodes: 01-cis-hardening.yml (refuses initialized Vault servers).
+- name: CIS Level 1
+  hosts: "{{ target | default('none') }}"  # -e target=<group-or-host> required
+  become: true
+  gather_facts: true
+  roles:
+    - role: cis

@@ -1,0 +1,39 @@
+---
+# CI runner block = building blocks composed in a fixed order:
+#   base -> hardening -> cis (auto, reboot on first run) -> hardening again
+#   -> podman_rootless -> gitlab_runner
+# Registration (glrt- token) stays manual: docs/ci/runner-runbook.md, part F.
+#   ansible-playbook playbooks/ci-runner.yml          # first run (cloud-image NOPASSWD)
+#   ansible-playbook playbooks/ci-runner.yml -K       # every later run
+- name: CI runner block
+  hosts: ci_runner
+  become: true
+  gather_facts: true
+  vars_prompt:
+    - name: hardening_admin_password
+      prompt: "sudo password for the admin user (new on the first run; password manager)"
+      private: true
+      confirm: true
+      unsafe: true
+  tasks:
+    - name: Operating baseline
+      ansible.builtin.include_role:
+        name: base
+    - name: Hardening (before CIS — sudo password must exist first)
+      ansible.builtin.include_role:
+        name: hardening
+    - name: CIS Level 1 (automatic remediation)
+      ansible.builtin.include_role:
+        name: cis
+    - name: Hardening again (our SSH/firewall/sudo win over CIS defaults)
+      ansible.builtin.include_role:
+        name: hardening
+    - name: Rootless Podman for the runner account
+      ansible.builtin.include_role:
+        name: podman_rootless
+      vars:
+        podman_user: "{{ gitlab_runner_user }}"
+        podman_socket: true
+    - name: GitLab Runner
+      ansible.builtin.include_role:
+        name: gitlab_runner

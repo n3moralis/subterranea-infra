@@ -1,0 +1,133 @@
+---
+- name: Inputs
+  ansible.builtin.assert:
+    that: podman_user is defined and podman_user | length > 0
+    fail_msg: "Set podman_user."
+    quiet: true
+
+- name: OS family variables
+  ansible.builtin.include_vars: "{{ ansible_facts['os_family'] }}.yml"
+
+- name: Podman
+  ansible.builtin.package:
+    name: "{{ podman_packages }}"
+    state: present
+
+- name: Service account (no sudo, no password, login shell only for runuser)
+  ansible.builtin.user:
+    name: "{{ podman_user }}"
+    shell: /bin/bash
+    password: "!"
+    create_home: true
+  when: podman_user_create | bool
+
+- name: Account details
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ podman_user }}"
+
+- name: UID, runtime dir and socket path (facts for later roles)
+  ansible.builtin.set_fact:
+    podman_user_uid: "{{ ansible_facts['getent_passwd'][podman_user][1] }}"
+    podman_user_home: "{{ ansible_facts['getent_passwd'][podman_user][4] }}"
+    podman_runtime_dir: "/run/user/{{ ansible_facts['getent_passwd'][podman_user][1] }}"
+    podman_socket_path: "unix:///run/user/{{ ansible_facts['getent_passwd'][podman_user][1] }}/podman/podman.sock"
+
+- name: Subordinate UID/GID range
+  ansible.builtin.lineinfile:
+    path: "{{ item }}"
+    regexp: "^{{ podman_user }}:"
+    line: "{{ podman_user }}:{{ podman_subid_start }}:{{ podman_subid_count }}"
+    create: true
+    mode: "0644"
+  loop: [/etc/subuid, /etc/subgid]
+
+- name: Lingering (user services run without a login session)
+  ansible.builtin.command: loginctl enable-linger {{ podman_user }}
+  args:
+    creates: /var/lib/systemd/linger/{{ podman_user }}
+
+- name: Podman API socket of the user
+  ansible.builtin.command: >-
+    runuser -u {{ podman_user }} --
+    env XDG_RUNTIME_DIR={{ podman_runtime_dir }}
+    systemctl --user enable --now podman.socket
+  args:
+    creates: "{{ podman_user_home }}/.config/systemd/user/sockets.target.wants/podman.socket"
+  when: podman_socket | bool
+
+- name: Podman API socket of the user
+  ansible.builtin.command: >-
+    runuser -u {{ podman_user }} --
+    env XDG_RUNTIME_DIR={{ podman_runtime_dir }}
+    systemctl --user enable --now podman.socket
+  args:
+    # runuser keeps the caller's cwd (the admin's home, 0700 after CIS): start
+    # in the service account's own home or podman/systemctl cannot chdir.
+    chdir: "{{ podman_user_home }}"
+    creates: "{{ podman_user_home }}/.config/systemd/user/sockets.target.wants/podman.socket"
+  when: podman_socket | bool
+
+- name: Podman really runs rootless
+  ansible.builtin.command: >-
+    runuser -u {{ podman_user }} --
+    env XDG_RUNTIME_DIR={{ podman_runtime_dir }}
+    podman info --format {% raw %}'{{.Host.Security.Rootless}}'{% endraw %}
+  args:
+    chdir: "{{ podman_user_home }}"
+  register: podman_rootless_check
+  changed_when: false
+  failed_when: podman_rootless_check.stdout | trim != 'true'
+
+# CIS installs AIDE; container storage changes constantly and would bury real
+# findings. Exclude it (only if AIDE is present).
+- name: AIDE configuration present?
+  ansible.builtin.stat:
+    path: "{{ '/etc/aide.conf' if ansible_facts['os_family'] == 'RedHat' else '/etc/aide/aide.conf' }}"
+  register: podman_aide_conf
+
+- name: AIDE ignores this user's container storage
+  ansible.builtin.lineinfile:
+    path: "{{ podman_aide_conf.stat.path }}"
+    line: "!{{ podman_user_home }}/.local/share/containers"
+    insertafter: EOF
+  when: podman_aide_conf.stat.exists
+
+- name: Prune service
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/podman-prune-{{ podman_user }}.service
+    content: |
+      # Managed by Ansible (role podman_rootless)
+      [Unit]
+      Description=Prune {{ podman_user }} images/containers older than {{ podman_prune_age }}
+      [Service]
+      Type=oneshot
+      User={{ podman_user }}
+      Environment=XDG_RUNTIME_DIR={{ podman_runtime_dir }}
+      ExecStart=/usr/bin/podman system prune -af --filter until={{ podman_prune_age }}
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Prune timer
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/podman-prune-{{ podman_user }}.timer
+    content: |
+      # Managed by Ansible (role podman_rootless)
+      [Unit]
+      Description=Weekly prune for {{ podman_user }}
+      [Timer]
+      OnCalendar=weekly
+      Persistent=true
+      [Install]
+      WantedBy=timers.target
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Prune timer enabled
+  ansible.builtin.systemd_service:
+    name: podman-prune-{{ podman_user }}.timer
+    enabled: true
+    state: started
+    daemon_reload: true

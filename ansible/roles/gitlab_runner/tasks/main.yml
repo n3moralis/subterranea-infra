@@ -1,0 +1,119 @@
+---
+- name: Inputs and prerequisites
+  ansible.builtin.assert:
+    that:
+      - gitlab_runner_version is defined
+      - podman_socket_path is defined
+    fail_msg: "Set gitlab_runner_version and run role podman_rootless (podman_socket: true) first."
+    quiet: true
+
+# Repository configured explicitly (signed packages + metadata) instead of the
+# vendor's curl | bash installer.
+- name: Package repository and pinned package
+  ansible.builtin.include_tasks: "install_{{ ansible_facts['os_family'] }}.yml"
+
+# The packaged unit runs the runner as root; run it as the service user.
+- name: Config directory owned by the runner user
+  ansible.builtin.file:
+    path: /etc/gitlab-runner
+    state: directory
+    owner: "{{ gitlab_runner_user }}"
+    group: "{{ gitlab_runner_user }}"
+    mode: "0700"
+
+- name: Unit drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/gitlab-runner.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Runner process as the unprivileged user
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/gitlab-runner.service.d/10-unprivileged.conf
+    content: |
+      # Managed by Ansible (role gitlab_runner)
+      [Service]
+      User={{ gitlab_runner_user }}
+      Group={{ gitlab_runner_user }}
+      Environment=XDG_RUNTIME_DIR={{ podman_runtime_dir }}
+      ExecStart=
+      ExecStart=/usr/bin/gitlab-runner run --config /etc/gitlab-runner/config.toml --working-directory {{ podman_user_home }} --service gitlab-runner
+      NoNewPrivileges=yes
+      PrivateTmp=yes
+      ProtectSystem=full
+      ReadWritePaths=/etc/gitlab-runner
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart gitlab-runner
+
+- name: Runner service enabled
+  ansible.builtin.systemd_service:
+    name: gitlab-runner
+    enabled: true
+    state: started
+    daemon_reload: true
+
+# --- After registration: enforce the safe settings --------------------------
+# The service writes a skeleton config.toml (concurrent, check_interval) on its
+# first start, so "file exists" does not mean "registered". Registered = the
+# file has a [[runners]] section. Only counted, never printed (holds the token).
+- name: Config file present?
+  ansible.builtin.stat:
+    path: /etc/gitlab-runner/config.toml
+  register: gitlab_runner_cfg
+
+- name: Runner sections in config.toml
+  ansible.builtin.command: grep -c '^\[\[runners\]\]' /etc/gitlab-runner/config.toml
+  register: gitlab_runner_sections
+  changed_when: false
+  failed_when: false
+  when: gitlab_runner_cfg.stat.exists
+
+- name: Registration state
+  ansible.builtin.set_fact:
+    gitlab_runner_registered: >-
+      {{ gitlab_runner_cfg.stat.exists and
+         (gitlab_runner_sections.stdout | default('0') | int) > 0 }}
+
+- name: Config file permissions (it holds the runner token)
+  ansible.builtin.file:
+    path: /etc/gitlab-runner/config.toml
+    owner: "{{ gitlab_runner_user }}"
+    group: "{{ gitlab_runner_user }}"
+    mode: "0600"
+  when: gitlab_runner_cfg.stat.exists
+
+- name: Parallel jobs
+  ansible.builtin.lineinfile:
+    path: /etc/gitlab-runner/config.toml
+    regexp: '^concurrent\s*='
+    line: "concurrent = {{ gitlab_runner_concurrent }}"
+  when: gitlab_runner_registered | bool
+  notify: Restart gitlab-runner
+
+- name: Read executor settings (no token printed)
+  ansible.builtin.command: grep -E '^\s*(privileged|host|allowed_images)\s*=' /etc/gitlab-runner/config.toml
+  register: gitlab_runner_settings
+  changed_when: false
+  failed_when: false
+  when: gitlab_runner_registered | bool
+
+- name: Safe executor settings are in place
+  ansible.builtin.assert:
+    that:
+      - gitlab_runner_settings.stdout is search('privileged = false')
+      - gitlab_runner_settings.stdout is search('podman/podman.sock')
+      - gitlab_runner_settings.stdout is search('allowed_images')
+    fail_msg: "config.toml lacks privileged=false, the Podman socket or allowed_images — re-register (runbook F)."
+    quiet: true
+  when: gitlab_runner_registered | bool
+
+- name: Next step
+  ansible.builtin.debug:
+    msg: >-
+      {{ 'Runner registered and checked.' if gitlab_runner_registered | bool else
+         'Not registered yet: runbook F with --docker-host ' ~ podman_socket_path
+         ~ ', then run the playbook again with -K.' }}

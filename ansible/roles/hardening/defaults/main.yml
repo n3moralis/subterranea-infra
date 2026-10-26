@@ -1,0 +1,42 @@
+---
+# Admin account created by cloud-init (Terraform user_account).
+hardening_admin_user: ops
+# Required: its sudo password (pass from vars_prompt, never a file).
+# hardening_admin_password:
+
+# Required: sources allowed to SSH (IPs or CIDRs). Tailscale subnet routers
+# SNAT, so this is the subnet router's LAN address.
+hardening_ssh_sources: []
+
+# Inbound ports a block serves to clients, opened in the default zone
+# (e.g. ["3000/tcp"]). Empty = nothing but SSH from hardening_ssh_sources.
+hardening_firewall_public_ports: []
+
+# Kernel hardening (/etc/sysctl.d/90-hardening.conf). Override per group if a
+# block needs something else. User namespaces stay ON: rootless Podman needs them.
+hardening_sysctl:
+  kernel.kptr_restrict: 2
+  kernel.dmesg_restrict: 1
+  kernel.yama.ptrace_scope: 1
+  kernel.unprivileged_bpf_disabled: 1
+  net.core.bpf_jit_harden: 2
+  fs.protected_hardlinks: 1
+  fs.protected_symlinks: 1
+  fs.protected_fifos: 2
+  fs.protected_regular: 2
+  fs.suid_dumpable: 0
+  net.ipv4.tcp_syncookies: 1
+  net.ipv4.icmp_echo_ignore_broadcasts: 1
+  net.ipv4.conf.all.accept_redirects: 0
+  net.ipv4.conf.default.accept_redirects: 0
+  net.ipv4.conf.all.send_redirects: 0
+  net.ipv4.conf.default.send_redirects: 0
+  net.ipv4.conf.all.accept_source_route: 0
+  net.ipv4.conf.default.accept_source_route: 0
+  net.ipv4.conf.all.rp_filter: 1
+  net.ipv4.conf.default.rp_filter: 1
+  net.ipv4.conf.all.log_martians: 1
+  net.ipv6.conf.all.accept_redirects: 0
+  net.ipv6.conf.default.accept_redirects: 0
+  net.ipv6.conf.all.accept_ra: 0
+  net.ipv6.conf.default.accept_ra: 0

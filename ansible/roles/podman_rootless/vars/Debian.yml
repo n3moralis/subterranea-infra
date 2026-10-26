@@ -1,0 +1,3 @@
+---
+# uidmap: newuidmap/newgidmap; passt: rootless networking; dbus-user-session: systemctl --user
+podman_packages: [podman, uidmap, passt, dbus-user-session]

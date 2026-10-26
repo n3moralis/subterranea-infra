@@ -1,0 +1,6 @@
+---
+# CIS Level 1 is applied automatically on every block run (drift is corrected).
+cis_enabled: true
+# Reboot once, after the first remediation (kernel modules, sysctl, mounts, audit).
+cis_reboot_on_first_run: true
+cis_marker: /etc/cis-l1-applied

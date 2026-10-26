@@ -1,0 +1,8 @@
+---
+base_os_packages:
+  - chrony
+  - dnf-automatic
+  - qemu-guest-agent
+  - python3-dnf-plugin-versionlock
+base_chrony_conf: /etc/chrony.conf
+base_chrony_service: chronyd

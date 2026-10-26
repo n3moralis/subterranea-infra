@@ -1,0 +1,38 @@
+---
+# Public showcase CI — runs ci/lint.sh in the same Debian image as the
+# self-hosted GitLab CI, plus gitleaks over the full public history.
+# No deploy: nothing here can reach the infrastructure.
+name: ci
+
+"on":
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    container: python:3.12-slim-bookworm     # same image as GitLab CI
+    steps:
+      # Supply chain: pin actions to a commit SHA once the repo is stable
+      # (Dependabot "github-actions" keeps the pins current).
+      - uses: actions/checkout@v4
+      - name: Static checks (ci/lint.sh)
+        run: bash ci/lint.sh
+
+  secrets:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # scan every public commit, not just the tip
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

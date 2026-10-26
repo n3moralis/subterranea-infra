@@ -1,0 +1,78 @@
+---
+# firewalld on both families: zone "mgmt" = admin sources with SSH; the
+# default zone allows only the block's public ports.
+- name: Source address of this SSH session (without sudo, which drops SSH_CLIENT)
+  ansible.builtin.command: printenv SSH_CLIENT
+  become: false
+  register: hardening_ssh_client
+  changed_when: false
+
+- name: Normalise SSH sources to CIDRs
+  ansible.builtin.set_fact:
+    hardening_ssh_session_src: "{{ hardening_ssh_client.stdout.split(' ')[0] }}"
+    hardening_ssh_sources_cidr: "{{ hardening_ssh_sources | map('regex_replace', '^([^/]+)$', '\\1/32') | list }}"
+
+- name: Anti-lockout — this session must come from an allowed source
+  ansible.builtin.assert:
+    that: >-
+      hardening_ssh_sources_cidr | map('ansible.utils.network_in_network', hardening_ssh_session_src)
+      | select | list | length > 0
+    fail_msg: >-
+      This session comes from {{ hardening_ssh_session_src }}, which is not in
+      hardening_ssh_sources {{ hardening_ssh_sources }}. Fix the inventory before continuing.
+    quiet: true
+
+- name: Zone "mgmt" exists
+  ansible.posix.firewalld:
+    zone: mgmt
+    state: present
+    permanent: true
+  register: hardening_mgmt_zone
+
+- name: Load the new zone
+  ansible.builtin.command: firewall-cmd --reload
+  when: hardening_mgmt_zone is changed  # noqa: no-handler (zone must exist before rules)
+  changed_when: true
+
+- name: Admin sources belong to zone mgmt
+  ansible.posix.firewalld:
+    zone: mgmt
+    source: "{{ item }}"
+    state: enabled
+    permanent: true
+    immediate: true
+  loop: "{{ hardening_ssh_sources_cidr }}"
+
+- name: SSH allowed in zone mgmt
+  ansible.posix.firewalld:
+    zone: mgmt
+    service: ssh
+    state: enabled
+    permanent: true
+    immediate: true
+
+- name: Default zone serves only the block's public ports
+  ansible.posix.firewalld:
+    zone: public
+    port: "{{ item }}"
+    state: enabled
+    permanent: true
+    immediate: true
+  loop: "{{ hardening_firewall_public_ports }}"
+
+- name: Default zone has no services (SSH only via mgmt)
+  ansible.posix.firewalld:
+    zone: public
+    service: "{{ item }}"
+    state: disabled
+    permanent: true
+    immediate: true
+  loop: [ssh, cockpit, dhcpv6-client]
+
+- name: Drop the SSH connection after the firewall change
+  ansible.builtin.meta: reset_connection
+
+- name: A NEW SSH login still works through the firewall
+  ansible.builtin.command: "true"
+  become: false
+  changed_when: false

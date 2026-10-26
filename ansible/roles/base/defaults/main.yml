@@ -1,0 +1,8 @@
+---
+# Required: NTP server (the block's OPNsense gateway).
+# base_ntp_server:
+
+# Apply security updates automatically (dnf-automatic / unattended-upgrades).
+base_auto_security_updates: true
+
+base_extra_packages: []

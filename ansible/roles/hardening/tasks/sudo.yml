@@ -1,0 +1,75 @@
+---
+# Cloud images give the admin NOPASSWD sudo. Anti-lockout order:
+# set password -> use it for become -> remove NOPASSWD -> prove both.
+- name: Admin password (deterministic salt = idempotent) and sudo group
+  ansible.builtin.user:
+    name: "{{ hardening_admin_user }}"
+    password: "{{ hardening_admin_password | password_hash('sha512', (inventory_hostname | hash('sha256'))[:16]) }}"
+    update_password: always
+    groups: "{{ hardening_sudo_group }}"
+    append: true
+  no_log: true
+
+- name: Use that password for every later become
+  ansible.builtin.set_fact:
+    ansible_become_password: "{{ hardening_admin_password }}"
+  no_log: true
+
+# NOPASSWD rules can sit in /etc/sudoers (Rocky: "rocky ALL=(ALL) NOPASSWD: ALL")
+# and in any included file (cloud-init: /etc/sudoers.d/90-cloud-init-users, maybe
+# a symlink). Ask sudo itself which files it reads ("visudo -c" lists every
+# parsed file), resolve links, and remove only the NOPASSWD lines. visudo
+# validates each result before it replaces the file, so sudoers can never break.
+- name: Sudoers files that still grant NOPASSWD
+  ansible.builtin.shell: |
+    set -o pipefail
+    /usr/sbin/visudo -c | sed -n 's/: parsed OK$//p' | xargs -r readlink -f | sort -u \
+      | xargs -r grep -lE '^[^#]*NOPASSWD' || true
+  register: hardening_nopasswd_files
+  changed_when: false
+
+- name: Remove NOPASSWD rules
+  ansible.builtin.lineinfile:
+    path: "{{ item }}"
+    regexp: '^[^#]*NOPASSWD'
+    state: absent
+    validate: /usr/sbin/visudo -cf %s
+  loop: "{{ hardening_nopasswd_files.stdout_lines }}"
+
+- name: No sudoers file grants NOPASSWD any more
+  ansible.builtin.shell: |
+    set -o pipefail
+    /usr/sbin/visudo -c | sed -n 's/: parsed OK$//p' | xargs -r readlink -f | sort -u \
+      | xargs -r grep -nE '^[^#]*NOPASSWD' || true
+  register: hardening_nopasswd_left
+  changed_when: false
+  failed_when: hardening_nopasswd_left.stdout | length > 0
+
+# -k: ignore the credential cached by the become just above; without it the
+# check can pass by accident (sudo remembers the password for a few minutes).
+- name: Non-interactive sudo must now fail
+  ansible.builtin.command: sudo -k -n true
+  become: false
+  register: hardening_sudo_n
+  changed_when: false
+  failed_when: false
+
+- name: Show which rule still allows sudo without a password
+  ansible.builtin.command: sudo -n -l
+  become: false
+  register: hardening_sudo_rules
+  changed_when: false
+  failed_when: false
+  when: hardening_sudo_n.rc == 0
+
+- name: Sudo without a password is refused
+  ansible.builtin.assert:
+    that: hardening_sudo_n.rc != 0
+    fail_msg: "sudo still works without a password. Rules: {{ hardening_sudo_rules.stdout_lines | default([]) }}"
+    quiet: true
+
+- name: Sudo with the password works
+  ansible.builtin.command: id -un
+  register: hardening_become
+  changed_when: false
+  failed_when: hardening_become.stdout != 'root'

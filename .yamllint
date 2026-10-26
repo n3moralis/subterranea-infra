@@ -1,0 +1,24 @@
+---
+extends: default
+rules:
+  comments:
+    min-spaces-from-content: 1
+  comments-indentation: false
+  braces:
+    max-spaces-inside: 1
+  octal-values:
+    forbid-implicit-octal: true
+    forbid-explicit-octal: true
+  line-length:
+    max: 160
+  truthy:
+    allowed-values: ["true", "false"]
+    check-keys: false
+ignore: |
+  # Galaxy content (external, not ours). "**/" makes the patterns match no
+  # matter where yamllint is started (repo root or ansible/). Own roles
+  # (roles/vault_*, later) are NOT ignored.
+  **/roles/RHEL9-CIS/
+  **/collections/
+  **/.ansible/
+  **/.venv/

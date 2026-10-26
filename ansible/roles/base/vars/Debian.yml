@@ -1,0 +1,7 @@
+---
+base_os_packages:
+  - chrony
+  - unattended-upgrades
+  - qemu-guest-agent
+base_chrony_conf: /etc/chrony/chrony.conf
+base_chrony_service: chrony

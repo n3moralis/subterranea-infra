@@ -1,0 +1,39 @@
+---
+- name: Kernel hardening parameters
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    sysctl_file: /etc/sysctl.d/90-hardening.conf
+    sysctl_set: true
+    state: present
+  loop: "{{ hardening_sysctl | dict2items }}"
+
+- name: No core dumps (they can contain secrets)
+  ansible.builtin.copy:
+    dest: /etc/security/limits.d/90-no-core.conf
+    content: |
+      # Managed by Ansible (role hardening)
+      * hard core 0
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Systemd-coredump drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/coredump.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Systemd-coredump stores nothing
+  ansible.builtin.copy:
+    dest: /etc/systemd/coredump.conf.d/90-hardening.conf
+    content: |
+      # Managed by Ansible (role hardening)
+      [Coredump]
+      Storage=none
+      ProcessSizeMax=0
+    owner: root
+    group: root
+    mode: "0644"

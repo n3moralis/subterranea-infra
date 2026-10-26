@@ -1,0 +1,16 @@
+---
+# Required: the account that owns the containers (e.g. gitlab-runner, svc-monitoring).
+# podman_user:
+
+# Create the account here (false when a package creates it, e.g. gitlab-runner).
+podman_user_create: true
+
+# Subordinate UID/GID range; must not overlap other users on the host.
+podman_subid_start: 300000
+podman_subid_count: 65536
+
+# Docker-API compatible socket for this user (needed by GitLab Runner's docker executor).
+podman_socket: false
+
+# Weekly cleanup of images/containers older than this.
+podman_prune_age: 168h

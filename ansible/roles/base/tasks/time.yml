@@ -1,0 +1,15 @@
+---
+- name: Chrony uses only the block's gateway
+  ansible.builtin.copy:
+    dest: "{{ base_chrony_conf }}"
+    content: |
+      # Managed by Ansible (role base)
+      server {{ base_ntp_server }} iburst
+      driftfile /var/lib/chrony/drift
+      makestep 1.0 3
+      rtcsync
+      logdir /var/log/chrony
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart chrony

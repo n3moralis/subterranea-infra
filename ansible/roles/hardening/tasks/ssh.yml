@@ -1,0 +1,49 @@
+---
+# 00- prefix: sshd keeps the first value it reads; the drop-in Include comes first.
+- name: Key-only drop-in (validated before it is written)
+  ansible.builtin.copy:
+    dest: /etc/ssh/sshd_config.d/00-keys-only.conf
+    content: |
+      # Managed by Ansible (role hardening) — keys only, no passwords over SSH.
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      PermitRootLogin no
+      PubkeyAuthentication yes
+      AuthenticationMethods publickey
+    owner: root
+    group: root
+    mode: "0600"
+    validate: /usr/sbin/sshd -t -f %s
+  register: hardening_ssh_dropin
+
+- name: Full sshd configuration still valid
+  ansible.builtin.command: /usr/sbin/sshd -t
+  changed_when: false
+
+- name: Reload sshd
+  ansible.builtin.systemd_service:
+    name: "{{ hardening_sshd_service }}"
+    state: reloaded
+  when: hardening_ssh_dropin is changed  # noqa: no-handler (must happen before the checks)
+
+- name: Effective sshd settings
+  ansible.builtin.command: /usr/sbin/sshd -T
+  register: hardening_sshd_effective
+  changed_when: false
+
+- name: Passwords and root login are really off
+  ansible.builtin.assert:
+    that:
+      - "'passwordauthentication no' in hardening_sshd_effective.stdout_lines"
+      - "'kbdinteractiveauthentication no' in hardening_sshd_effective.stdout_lines"
+      - "'permitrootlogin no' in hardening_sshd_effective.stdout_lines"
+    fail_msg: "Another sshd setting still wins — check /etc/ssh/sshd_config.d/ ordering."
+    quiet: true
+
+- name: Drop the SSH connection after the sshd change
+  ansible.builtin.meta: reset_connection
+
+- name: A NEW key login still works
+  ansible.builtin.command: "true"
+  become: false
+  changed_when: false

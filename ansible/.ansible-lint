@@ -1,0 +1,9 @@
+---
+profile: production
+exclude_paths:
+  - roles/RHEL9-CIS/          # external Galaxy role; own roles stay linted
+  - collections/
+  - playbooks/cis-audit.yml   # needs the external RHEL9-CIS role (syntax-checked in CI)
+  - playbooks/01-cis-hardening.yml   # same
+skip_list:
+  - var-naming[no-role-prefix]

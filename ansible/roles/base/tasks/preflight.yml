@@ -1,0 +1,17 @@
+---
+- name: Supported OS (Rocky/RHEL 9, Debian 13)
+  ansible.builtin.assert:
+    that: >-
+      (ansible_facts['os_family'] == 'RedHat' and ansible_facts['distribution_major_version'] == '9')
+      or (ansible_facts['distribution'] == 'Debian' and ansible_facts['distribution_major_version'] == '13')
+    fail_msg: "base supports Rocky/RHEL 9 and Debian 13, got {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}"
+    quiet: true
+
+- name: OS family variables
+  ansible.builtin.include_vars: "{{ ansible_facts['os_family'] }}.yml"
+
+- name: Required inputs are set
+  ansible.builtin.assert:
+    that: base_ntp_server is defined and base_ntp_server | length > 0
+    fail_msg: "Set base_ntp_server (the block's gateway)."
+    quiet: true

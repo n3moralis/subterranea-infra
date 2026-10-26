@@ -1,0 +1,10 @@
+---
+# After CIS remediation the audit config can be immutable (-e 2) until reboot;
+# the new rules are then loaded at the next boot.
+- name: Load audit rules
+  ansible.builtin.command: augenrules --load
+  register: hardening_augenrules
+  changed_when: true
+  failed_when:
+    - hardening_augenrules.rc != 0
+    - "'immutable' not in (hardening_augenrules.stderr + hardening_augenrules.stdout)"

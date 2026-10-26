@@ -1,0 +1,6 @@
+---
+- name: AppArmor enabled
+  ansible.builtin.command: aa-enabled
+  register: hardening_apparmor
+  changed_when: false
+  failed_when: hardening_apparmor.stdout | trim != 'Yes'

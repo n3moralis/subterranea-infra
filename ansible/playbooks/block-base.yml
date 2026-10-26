@@ -1,0 +1,30 @@
+---
+# A plain block = building blocks in a fixed order:
+#   base -> hardening -> cis (auto-remediation, reboot on first run) -> hardening again
+# hardening runs BEFORE cis (sudo password exists before CIS can remove NOPASSWD)
+# and AFTER it (our SSH/firewall/sudo settings win over the benchmark defaults).
+#   ansible-playbook playbooks/block-base.yml -e target=<group-or-host>     # first run
+#   ansible-playbook playbooks/block-base.yml -e target=<group-or-host> -K  # later runs
+- name: Block baseline
+  hosts: "{{ target | default('none') }}"  # -e target=<group-or-host> required
+  become: true
+  gather_facts: true
+  vars_prompt:
+    - name: hardening_admin_password
+      prompt: "sudo password for the admin user (new on the first run; password manager)"
+      private: true
+      confirm: true
+      unsafe: true
+  tasks:
+    - name: Operating baseline
+      ansible.builtin.include_role:
+        name: base
+    - name: Hardening (before CIS)
+      ansible.builtin.include_role:
+        name: hardening
+    - name: CIS Level 1
+      ansible.builtin.include_role:
+        name: cis
+    - name: Hardening again (our settings on top of CIS)
+      ansible.builtin.include_role:
+        name: hardening

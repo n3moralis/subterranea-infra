@@ -1,0 +1,12 @@
+---
+- name: SELinux enforcing (targeted)
+  ansible.posix.selinux:
+    policy: targeted
+    state: enforcing
+  register: hardening_selinux
+
+- name: SELinux needs a reboot only if it was disabled before
+  ansible.builtin.assert:
+    that: not (hardening_selinux.reboot_required | default(false))
+    fail_msg: "SELinux was disabled; reboot (relabel) and run again."
+    quiet: true

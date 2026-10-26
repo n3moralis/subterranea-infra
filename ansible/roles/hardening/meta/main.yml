@@ -1,0 +1,13 @@
+---
+galaxy_info:
+  role_name: hardening
+  author: subterranea
+  description: Security hardening for every block (MAC, sysctl, audit, sudo, SSH, firewall)
+  license: MIT
+  min_ansible_version: "2.16"
+  platforms:
+    - name: EL
+      versions: ["9"]
+    - name: Debian
+      versions: [trixie]
+dependencies: []

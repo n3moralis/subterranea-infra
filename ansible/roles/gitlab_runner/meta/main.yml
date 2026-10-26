@@ -1,0 +1,14 @@
+---
+galaxy_info:
+  role_name: gitlab_runner
+  author: subterranea
+  description: GitLab Runner as an unprivileged user on rootless Podman (docker executor)
+  license: MIT
+  min_ansible_version: "2.16"
+  platforms:
+    - name: EL
+      versions: ["9"]
+    - name: Debian
+      versions: [trixie]
+# podman_rootless must run first (podman_user = gitlab_runner_user, podman_socket = true).
+dependencies: []

@@ -1,0 +1,16 @@
+---
+# Building block 2/2 for any block: security hardening (role hardening).
+#   ansible-playbook playbooks/hardening.yml -e target=<group-or-host>
+# First run on a fresh VM: no -K (cloud-image NOPASSWD); afterwards: -K.
+- name: Security hardening
+  hosts: "{{ target | default('blocks') }}"
+  become: true
+  gather_facts: true
+  vars_prompt:
+    - name: hardening_admin_password
+      prompt: "sudo password for the admin user (new on the first run; password manager)"
+      private: true
+      confirm: true
+      unsafe: true
+  roles:
+    - role: hardening

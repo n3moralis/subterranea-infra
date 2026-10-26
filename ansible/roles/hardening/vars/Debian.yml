@@ -1,0 +1,4 @@
+---
+hardening_packages: [firewalld, auditd, apparmor, sudo]
+hardening_sudo_group: sudo
+hardening_sshd_service: ssh

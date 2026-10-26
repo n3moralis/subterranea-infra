@@ -1,0 +1,50 @@
+# ALLOWLIST for the public GitHub showcase — a PRESENTATION, not a mirror.
+# Rule: publish the reusable skeleton (generic code, concepts, CI), never the
+# environment (inventory, runbooks with network detail, Vault ceremony and
+# operations). Every line still goes through redaction + verification in
+# tools/public-export.sh. Review each new line: "useful to a reader AND harmless?"
+
+# Front page, conventions, CI (same lint as GitLab)
+README.md
+.yamllint
+.editorconfig
+.github/workflows/ci.yml
+ci/lint.sh
+ci/publish-github.sh
+ci/requirements.txt
+
+# Concept: how the platform is built (no addresses, no procedures)
+docs/platform/building-blocks.md
+
+# Terraform: generic VM module + root config (values redacted by the map)
+terraform/modules/**/*.tf
+terraform/proxmox/*.tf
+terraform/README.md
+
+# Ansible building blocks: generic roles and the playbooks composing them
+ansible/ansible.cfg
+ansible/.ansible-lint
+ansible/requirements.yml
+ansible/roles/base/**
+ansible/roles/hardening/**
+ansible/roles/cis/**
+ansible/roles/podman_rootless/**
+ansible/roles/gitlab_runner/**
+ansible/playbooks/base.yml
+ansible/playbooks/hardening.yml
+ansible/playbooks/cis.yml
+ansible/playbooks/block-base.yml
+ansible/playbooks/ci-runner.yml
+
+# How the showcase itself is produced (the private map never)
+tools/public-export.sh
+tools/public-include.txt
+
+# Deliberately NOT public (stay on GitLab):
+#   ansible/inventory/**            real hosts, users, sources
+#   ansible/playbooks/0*-*.yml, vault-*.yml, site.yml
+#                                   Vault operations, ceremony-dependent
+#   docs/vault/**, docs/account-model.md, docs/ci/runner-runbook.md
+#                                   procedures with topology and firewall detail
+#   tools/.public-map               reverses the redaction
+# Public write-ups (high level) live on the blog, not here.

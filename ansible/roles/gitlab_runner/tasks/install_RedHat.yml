@@ -1,0 +1,34 @@
+---
+# The repository is DISABLED by default and only enabled for the install task
+# below. Reason: "update everything" jobs (RHEL9-CIS patch step, dnf-automatic,
+# Ansible's dnf module, which does not always honour versionlock) would
+# otherwise see newer gitlab-runner-helper-images and fail on the exact-version
+# dependency. Runner upgrades happen only here, with a new gitlab_runner_version.
+- name: GitLab Runner repository (signed packages and metadata, disabled)
+  ansible.builtin.yum_repository:
+    name: runner_gitlab-runner
+    description: GitLab Runner
+    baseurl: "{{ gitlab_runner_repo_base }}/el/{{ ansible_facts['distribution_major_version'] }}/$basearch"
+    gpgcheck: true
+    repo_gpgcheck: true
+    gpgkey: "{{ gitlab_runner_gpgkeys }}"   # metadata key + package key
+    sslverify: true
+    enabled: false
+
+- name: GitLab Runner (pinned)
+  ansible.builtin.dnf:
+    name:
+      - "gitlab-runner-{{ gitlab_runner_version }}"
+      - "gitlab-runner-helper-images-{{ gitlab_runner_version }}"
+    enablerepo: runner_gitlab-runner
+    state: present
+
+# Second safety net for manual "dnf upgrade --enablerepo=...": both packages
+# locked, since gitlab-runner requires helper-images of the very same version.
+- name: Version lock (upgrades only together with GitLab)
+  ansible.builtin.command: >-
+    dnf -q versionlock add
+    gitlab-runner-{{ gitlab_runner_version }}
+    gitlab-runner-helper-images-{{ gitlab_runner_version }}
+  register: gitlab_runner_vlock
+  changed_when: "'Adding versionlock' in gitlab_runner_vlock.stdout"

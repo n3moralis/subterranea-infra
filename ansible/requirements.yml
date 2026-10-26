@@ -1,0 +1,15 @@
+---
+collections:
+  - name: community.crypto   # offline PKI, per-node keys/CSRs, ssh keys
+  - name: community.general
+  - name: ansible.posix      # firewalld
+  - name: ansible.utils      # CIDR checks (needs python "netaddr" on the controller)
+
+roles:
+  # CIS Benchmark for Rocky/RHEL 9:
+  #   01-cis-hardening.yml — remediation, FRESH hosts only (guarded)
+  #   cis-audit.yml        — check mode on running hosts
+  # PIN a release tag or commit (supply chain): git ls-remote --tags <src>
+  - name: RHEL9-CIS
+    src: https://github.com/ansible-lockdown/RHEL9-CIS.git
+    version: main   # TODO: replace with the tag/commit you tested

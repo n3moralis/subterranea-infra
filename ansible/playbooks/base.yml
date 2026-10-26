@@ -1,0 +1,9 @@
+---
+# Building block 1/2 for any block: operating baseline (role base).
+#   ansible-playbook playbooks/base.yml -e target=<group-or-host> [-K]
+- name: Operating baseline
+  hosts: "{{ target | default('blocks') }}"
+  become: true
+  gather_facts: true
+  roles:
+    - role: base

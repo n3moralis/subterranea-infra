@@ -1,0 +1,35 @@
+---
+- name: Supported OS (Rocky/RHEL 9, Debian 13)
+  ansible.builtin.assert:
+    that: >-
+      (ansible_facts['os_family'] == 'RedHat' and ansible_facts['distribution_major_version'] == '9')
+      or (ansible_facts['distribution'] == 'Debian' and ansible_facts['distribution_major_version'] == '13')
+    fail_msg: "hardening supports Rocky/RHEL 9 and Debian 13, got {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}"
+    quiet: true
+
+- name: OS family variables
+  ansible.builtin.include_vars: "{{ ansible_facts['os_family'] }}.yml"
+
+- name: Required inputs are set
+  ansible.builtin.assert:
+    that:
+      - hardening_admin_password is defined and hardening_admin_password | length >= 14
+      - hardening_ssh_sources | length > 0
+    fail_msg: "Set hardening_admin_password (vars_prompt, >= 14 chars — CIS pwquality minlen) and hardening_ssh_sources."
+    quiet: true
+
+- name: Security packages
+  ansible.builtin.package:
+    name: "{{ hardening_packages }}"
+    state: present
+
+- name: Firewalld running
+  ansible.builtin.systemd_service:
+    name: firewalld
+    enabled: true
+    state: started
+
+- name: Auditd enabled (refuses systemctl restarts; enable only)
+  ansible.builtin.systemd_service:
+    name: auditd
+    enabled: true
